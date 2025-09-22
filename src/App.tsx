@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { create } from 'zustand'
 import cn from 'classnames'
 import ReactMarkdown from 'react-markdown'
@@ -42,7 +42,7 @@ async function apiPost<T>(path: string, body: unknown, signal?: AbortSignal): Pr
 }
 
 // Sidebar nav
-type Tab = 'chat' | 'register'
+type Tab = 'chat' | 'register' | 'block-explorer'
 
 export default function App() {
   const [collapsed, setCollapsed] = useState(false)
@@ -80,6 +80,9 @@ export default function App() {
           <button className={cn('nav-item', { active: active === 'register' })} onClick={() => setActive('register')} aria-current={active === 'register' ? 'page' : undefined}>
             🧩 {!collapsed && <span>Register your LLM</span>}
           </button>
+          <button className={cn('nav-item', { active: active === 'block-explorer' })} onClick={() => setActive('block-explorer')} aria-current={active === 'block-explorer' ? 'page' : undefined}>
+            🧭 {!collapsed && <span>Block Explorer AI</span>}
+          </button>
         </nav>
         <div style={{ marginTop: 'auto', padding: 8 }}>
           {!collapsed && (
@@ -103,12 +106,18 @@ export default function App() {
         <header className="content-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div className="brand-dot" />
-            <strong>{active === 'chat' ? 'Chat with LLM' : 'Register LLM'}</strong>
+            <strong>{active === 'chat' ? 'Chat with LLM' : active === 'register' ? 'Register LLM' : 'Block Explorer AI'}</strong>
           </div>
           <button onClick={() => window.location.reload()} aria-label="Refresh">⟳</button>
         </header>
         <div className="content-body">
-          {active === 'chat' ? <ChatPage toast={toast} llms={llms ?? []} /> : <RegisterPage onRegistered={() => reloadModels(setLlms, toast)} toast={toast} />}
+          {active === 'chat' ? (
+            <ChatPage toast={toast} llms={llms ?? []} />
+          ) : active === 'register' ? (
+            <RegisterPage onRegistered={() => reloadModels(setLlms, toast)} toast={toast} />
+          ) : (
+            <BlockExplorerChat toast={toast} />
+          )}
         </div>
       </main>
 
@@ -293,6 +302,102 @@ function ChatPage({ toast, llms }: { toast: ReturnType<typeof useToastStore.getS
           onChange={(e) => setInput(e.target.value)}
           placeholder="Ask anything… (Cmd/Ctrl + Enter to send)"
           aria-label="Chat input"
+        />
+        <button onClick={sendMessage} disabled={loading || !input.trim()} aria-busy={loading}>
+          {loading ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}><span className="spinner" /> Sending</span> : 'Send'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// Block Explorer Chat (no model selection)
+function BlockExplorerChat({ toast }: { toast: ReturnType<typeof useToastStore.getState> }) {
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [input, setInput] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  async function sendMessage() {
+    const q = input.trim()
+    if (!q) return
+    setInput('')
+    const userMsg: ChatMessage = { id: crypto.randomUUID(), role: 'user', text: q }
+    setMessages((m) => [...m, userMsg])
+    setLoading(true)
+    try {
+      const res = await fetch('http://localhost:8010/api/v1/transactions/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: q }),
+      })
+      if (!res.ok) throw new Error(await res.text())
+      const raw = await res.text()
+      let md = raw
+      // Backend may return a plain text string, a JSON-encoded string, or an object with { response }
+      try {
+        const parsed = JSON.parse(raw)
+        if (typeof parsed === 'string') {
+          md = parsed
+        } else if (parsed && typeof parsed === 'object' && 'response' in parsed && typeof (parsed as any).response === 'string') {
+          md = (parsed as any).response
+        }
+      } catch {}
+      const aiMsg: ChatMessage = { id: crypto.randomUUID(), role: 'ai', text: md }
+      setMessages((m) => [...m, aiMsg])
+    } catch (e) {
+      toast.push({ text: parseApiError(e), type: 'error' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    const onEnter = (ev: KeyboardEvent) => {
+      if ((ev.key === 'Enter' || ev.keyCode === 13) && (ev.metaKey || ev.ctrlKey)) {
+        ev.preventDefault(); sendMessage()
+      }
+    }
+    window.addEventListener('keydown', onEnter)
+    return () => window.removeEventListener('keydown', onEnter)
+  }, [input])
+
+  const Message = ({ m }: { m: ChatMessage }) => (
+    <div className={cn('message-row', m.role)}>
+      <div className={cn('bubble', m.role)}>
+        {m.role === 'ai' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div className="brand-dot" style={{ boxShadow: '0 0 16px rgba(0,255,136,0.4)', background: 'radial-gradient(circle at 30% 30%, var(--color-accent-green), #08b46c)' }} />
+              <span className="muted" style={{ color: 'var(--color-accent-green)' }}>Block Explorer AI</span>
+            </div>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.text}</ReactMarkdown>
+          </div>
+        ) : (
+          <span>{m.text}</span>
+        )}
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="chat-wrap">
+      <div className="messages" aria-live="polite">
+        <div className="messages-center">
+          {messages.map((m) => (
+            <Message key={m.id} m={m} />
+          ))}
+          {loading && (
+            <div className="message-row ai"><div className="bubble ai" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}><span className="spinner" /><span className="muted">Querying…</span></div></div>
+          )}
+        </div>
+      </div>
+      <div className="input-row">
+        <textarea
+          rows={2}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="Ask blockchain analytics… (Cmd/Ctrl + Enter to send)"
+          aria-label="Block Explorer chat input"
         />
         <button onClick={sendMessage} disabled={loading || !input.trim()} aria-busy={loading}>
           {loading ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}><span className="spinner" /> Sending</span> : 'Send'}

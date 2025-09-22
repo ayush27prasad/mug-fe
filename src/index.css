@@ -7,6 +7,7 @@
   --color-text-dim: #b3b3b3;
   --color-accent: #ff6a00; /* neon orange */
   --color-accent-2: #ff8a33;
+  --color-accent-green: #00ff88; /* neon green, minimal usage */
 
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
   line-height: 1.5;
