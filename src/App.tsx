@@ -266,12 +266,14 @@ function ChatPage({ toast, llms }: { toast: ReturnType<typeof useToastStore.getS
   return (
     <div className="chat-wrap">
       <div className="messages" aria-live="polite">
-        {messages.map((m) => (
-          <Message key={m.id} m={m} />
-        ))}
-        {loading && (
-          <div className="message-row ai"><div className="bubble ai" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}><span className="spinner" /><span className="muted">Generating…</span></div></div>
-        )}
+        <div className="messages-center">
+          {messages.map((m) => (
+            <Message key={m.id} m={m} />
+          ))}
+          {loading && (
+            <div className="message-row ai"><div className="bubble ai" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}><span className="spinner" /><span className="muted">Generating…</span></div></div>
+          )}
+        </div>
       </div>
       <div style={{ padding: '8px', borderTop: '1px solid var(--color-border)', background: 'var(--color-panel)' }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
